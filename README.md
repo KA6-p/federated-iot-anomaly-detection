@@ -69,4 +69,4 @@ All 3 notebooks are built for Google Colab.
 
 ## What I would extend this toward
 
-Given more time, I would want to test the models against attack variants not seen during evaluation at all, try a non IID federated split (right now each device's local data is just its own natural traffic, but a harder and more realistic test would deliberately skew the label distribution per client), and compare FedAvg against a more robust aggregation strategy under simulated data poisoning, since that is closer to the kind of question real federated deployments have to answer.
+In future, I would want to test the models against attack variants not seen during evaluation at all, try a non IID federated split (right now each device's local data is just its own natural traffic, but a harder and more realistic test would deliberately skew the label distribution per client), and compare FedAvg against a more robust aggregation strategy under simulated data poisoning, since that is closer to the kind of question real federated deployments have to answer.

@@ -1,14 +1,14 @@
-Federated Anomaly Detection on IoT Traffic
+## Federated Anomaly Detection on IoT Traffic
 
 This project compares a centralized anomaly detector against a federated one, using real botnet attack traffic captured from IoT devices. The goal was to understand how much (if any) detection accuracy you give up when you cannot centralize IoT traffic data across devices, which is the realistic constraint in most actual IoT deployments.
 
-Motivation
+## Motivation
 
 IoT devices generate huge amounts of traffic, and a lot of that traffic could be useful for training security models. But in practice, different devices often belong to different owners, companies, or networks, and pooling their raw traffic centrally raises privacy and bandwidth concerns. Federated learning offers a way around this: each device trains a local model on its own data, and only the model's learned parameters get shared with a central server, which aggregates them into an improved global model. Raw traffic never leaves the device.
 
 This project builds and compares both approaches on the same problem, using the same underlying model, so the comparison is actually fair.
 
-Dataset
+## Dataset
 
 N-BaIoT, from the UCI Machine Learning Repository. It contains real network traffic captured from 9 commercial IoT devices, including both benign traffic and traffic recorded while the devices were infected with Mirai or BASHLITE botnet malware. Each row is a pre-engineered feature vector (115 statistical features per traffic window), so there is no raw packet parsing involved.
 

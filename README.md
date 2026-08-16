@@ -14,7 +14,7 @@ This project builds and compares both approaches on the same problem, using the 
 
 I used the [Kaggle mirror](https://www.kaggle.com/datasets/mkashifn/nbaiot-dataset) of this dataset since it is easier to pull directly into Google Colab than the original UCI zip file.
 
-I worked with 4 of the 9 devices to keep the project manageable within my timeline:
+I worked with 4 of the 9 devices:
 - Danmini Doorbell
 - Ecobee Thermostat
 - Philips B120N10 Baby Monitor

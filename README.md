@@ -81,7 +81,7 @@ All 3 notebooks are built for Google Colab.
 
 1. Get a Kaggle API token: kaggle.com, then Settings, then API Tokens, then Generate New Token.
 2. In Colab, click the key icon in the left sidebar, add a secret named `KAGGLE_TOKEN` with your token as the value, and turn on notebook access.
-3. Run the notebooks in order. Each one saves intermediate output (to Google Drive, under `gri-project1/processed`) that the next notebook loads, so they need to be run in sequence, and Drive needs to stay mounted across sessions if you want to avoid re downloading the dataset each time.
+3. Run the notebooks in order. Each one saves intermediate output (to Google Drive, under `nbaiot-project/processed`) that the next notebook loads, so they need to be run in sequence, and Drive needs to stay mounted across sessions if you want to avoid re downloading the dataset each time.
 
 ## What I would extend this toward
 

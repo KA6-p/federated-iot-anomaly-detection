@@ -24,6 +24,8 @@ I worked with 4 of the 9 devices:
 
 **Notebook 1, data exploration.** Loaded benign and attack traffic for each device, checked for missing values (none), and confirmed that benign and attack traffic are statistically distinguishable by plotting feature distributions for both classes. Built a combined, labeled dataset across all 4 devices (1,344,470 rows total) and saved it for the next two notebooks to use.
 
+![Benign vs attack feature distributions](images/feature_distributions.png)
+
 **Notebook 2, centralized baseline.** Trained two anomaly detectors the standard way, with all data in one place. Both models were trained only on benign traffic and evaluated on a held out mix of benign and attack traffic, since in a real deployment you do not have labeled attack examples ahead of time.
 - Isolation Forest (via PyOD)
 - A small autoencoder (PyTorch), using reconstruction error as the anomaly score
@@ -49,6 +51,20 @@ The federated version essentially matched the centralized autoencoder's performa
 The security camera consistently scored slightly lower than the other three devices across every single round, though still very high overall. My best guess is that its normal traffic pattern is more variable than something like a thermostat's (which likely sends fairly repetitive traffic), making it a slightly harder baseline to model. I have not confirmed this, it is a hypothesis based on the pattern in the results.
 
 The federated model also converged fast. The average ROC-AUC barely changed after round 1 and stayed roughly flat through round 10. This is a good property for a real deployment since it implies you would not need many communication rounds between devices and the server to reach strong performance.
+
+## Model and setup details
+
+Autoencoder architecture: input (115 features) -> 64 -> 16 (latent) -> 64 -> 115, ReLU activations, trained with MSE loss and Adam optimizer (lr=1e-3), 30 epochs, batch size 256.
+
+Isolation Forest: contamination=0.1, PyOD's default implementation.
+
+Train/test split: 70/30 split on benign data only, with all attack samples added to the test set. Random seed fixed at 42 for the split and for Isolation Forest.
+
+Federated setup: FedAvg strategy, 10 rounds, 5 local epochs per client per round, all 4 clients participating in every round.
+
+## Comparison to published results
+
+The original N-BaIoT paper (Meidan et al., 2018, "N-BaIoT: Network-based Detection of IoT Botnet Attacks Using Deep Autoencoders") reports similarly high per-device detection rates using autoencoders, which is consistent with what I found here.
 
 ## Honest limitations
 

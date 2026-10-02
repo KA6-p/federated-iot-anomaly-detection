@@ -2,7 +2,7 @@
 
 This project compares a centralized anomaly detector against a federated one, using real botnet attack traffic captured from IoT devices. The goal was to understand how much (if any) detection accuracy you give up when you cannot centralize IoT traffic data across devices, which is the realistic constraint in most actual IoT deployments.
 
-**Short version of what I found:** on the first, narrow evaluation, federated learning looked like it cost nothing (0.99998 AUC). When I tested on all 10 attack types and stressed the setup with non-IID data, plain FedAvg turned out to be much weaker on some devices and attacks. Handling the differences between devices (local feature scaling or FedProx) brought it back to about 0.994 to 0.996 AUC. Details below.
+**Summary of Findings:** on the first, narrow evaluation, federated learning looked like it cost nothing (0.99998 AUC). Extending to all 10 attack types, that still holds for 8 of them: every method, including plain FedAvg, scores 0.9998 to 1.0000. The weaker pooled number for plain FedAvg (0.95 AUC) comes almost entirely from two near-duplicate attack files (`gafgyt_tcp`, `gafgyt_udp`, about 20 distinct rows each), where plain FedAvg scores 0.66 to 0.75 and FedProx or local scaling score 0.97 to 0.98. Details and caveats below.
 
 ## Motivation
 
@@ -75,7 +75,7 @@ Notes on the setup:
 - Average across devices, final round: 0.99998 ROC-AUC
 - Per device: Doorbell 0.99999, Thermostat 0.99999, Baby Monitor 0.99999, Security Camera 0.99989
 
-On this evaluation, federated matched centralized. **This turned out to be too optimistic**, because the 4 attack types tested were the easy ones. The extension results below replace this headline.
+On this evaluation, federated matched centralized. The extension below shows this holds for 8 of the 10 attack types, but not for the two remaining ones (`gafgyt_tcp`, `gafgyt_udp`), which this first evaluation never tested.
 
 ### Extension: all 10 attack types
 
@@ -143,6 +143,7 @@ Federated, extension: see "Notes on the setup" above. The 70/30 benign split is 
 - **Single run per setting, 3 seeds.** The ranking of the top three methods is not settled. Only the gap between them and plain FedAvg is clearly larger than the noise.
 - **The cause of the FedAvg failure is a hypothesis.** Local scaling and FedProx both fix it, which points to differences between devices, but I have not run a test that isolates the exact cause.
 - **The two hard attacks are one weak, repeated signal.** `gafgyt_tcp` and `gafgyt_udp` have only 17 to 27 distinct rows per 20,000 and are near-copies of each other. Under a shared model their reconstruction errors are identical on all four devices, which suggests the same fixed point on every device (not directly verified). They make up 20% of the pooled attack rows, so they weigh heavily in pooled AUC and TPR despite carrying little information. Single raw features separate them from benign traffic almost perfectly, so the failure is not that they resemble normal traffic. It comes from the global model fitting Thermostat and Camera benign traffic poorly, which lifts normal error above this weak attack's error. Results on these two attacks also swing with the seed.
+- Method rankings on `gafgyt_tcp`/`gafgyt_udp` depend on how each model happens to reconstruct essentially one point (its error ranges from 0.07 to 4.4 across methods), so they should not be read as a general detection-quality ranking.
 - **The dataset is easy.** Attack traffic is statistically very distinct from benign traffic for most attack types, which is why most scores are near 1.0. Published N-BaIoT papers report similarly high numbers.
 - **Attack files are subsampled** to 20,000 rows each in the extension. AUC should be stable at that size, but I did not test other sizes.
 - **The federated setup is a simulation on one machine**, not a real multi-device deployment. It does not capture latency, dropped devices, or communication cost.

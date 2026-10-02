@@ -141,7 +141,7 @@ Federated, extension: see "Notes on the setup" above. The 70/30 benign split is 
 
 - **Single run per setting, 3 seeds.** The ranking of the top three methods is not settled. Only the gap between them and plain FedAvg is clearly larger than the noise.
 - **The cause of the FedAvg failure is a hypothesis.** Local scaling and FedProx both fix it, which points to differences between devices, but I have not run a test that isolates the exact cause.
-- **The two hard attacks may be near duplicates.** The tcp and udp results match to 3 or 4 decimals on every device, which suggests those two attack files look almost the same in this feature space. I have not checked this directly.
+- **The two hard attacks are near-copies of each other, and very repetitive.** A diagnostic in notebook 04 shows `gafgyt_tcp` and `gafgyt_udp` share only 1 identical row per device, but their feature means differ by at most 0.1 benign standard deviations, and each file has only about 20 distinct rows out of 20,000. So they count as roughly one hard attack with a small effective sample size, not two independent results. Individual features separate them from benign traffic at least as well as the easy `mirai_syn` attack, so the low AUC comes from how the autoencoder's reconstruction error scores them, not from the attack resembling normal traffic. I have not yet tested why.
 - **The dataset is easy.** Attack traffic is statistically very distinct from benign traffic for most attack types, which is why most scores are near 1.0. Published N-BaIoT papers report similarly high numbers.
 - **Attack files are subsampled** to 20,000 rows each in the extension. AUC should be stable at that size, but I did not test other sizes.
 - **The federated setup is a simulation on one machine**, not a real multi-device deployment. It does not capture latency, dropped devices, or communication cost.
@@ -159,6 +159,6 @@ All notebooks are built for Google Colab.
 
 ## What I would extend this toward
 
-- Check whether `gafgyt_tcp` and `gafgyt_udp` are near duplicates, and run a test that isolates why plain FedAvg fails on them (for example, by varying feature scaling while holding everything else fixed).
+- Run a test that isolates why plain FedAvg fails on `gafgyt_tcp` and `gafgyt_udp` (for example, by varying feature scaling while holding everything else fixed), and check why reconstruction error misses attacks that single features separate perfectly.
 - Compare FedAvg against a more robust aggregation strategy (median or trimmed mean) under simulated data poisoning, where one client sends bad updates. This is closer to the kind of question real federated deployments have to answer.
 - Use all 9 devices and a threshold chosen without any labeled data from other devices.

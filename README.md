@@ -2,8 +2,15 @@
 
 This project compares a centralized anomaly detector against a federated one, using real botnet attack traffic captured from IoT devices. The goal was to understand how much (if any) detection accuracy you give up when you cannot centralize IoT traffic data across devices, which is the realistic constraint in most actual IoT deployments.
 
-**Short version of what I found:** on the first, narrow evaluation (4 attack types), federated learning looked like it cost nothing (0.99998 AUC vs 0.99999 centralized). Extending to all 10 attack types, that holds for 8 of them: every method, including plain FedAvg, scores AUC 0.9998 to 1.0000 and catches at least 99.7% of attack rows at 1% false alarms. The weaker pooled score for plain FedAvg (0.95 AUC) comes almost entirely from two near-duplicate attack files (`gafgyt_tcp`, `gafgyt_udp`, about 20 distinct rows each), where plain FedAvg scores 0.66 to 0.75 AUC. Even the best methods catch those two files at 1% false alarms on only some devices. Federation also did not beat simply training one model per device in this setup. The trained detector is also exposed to an LLM through an MCP server (`mcp_server/`) that returns each verdict together with its percentile among normal traffic and the model's known blind spots. Details and caveats below.
+## Key findings
 
+- **Federation cost almost nothing on 8 of 10 attack types.** Every method, including plain FedAvg, reaches 0.9998 to 1.0000 AUC and catches at least 99.7% of attack rows at 1% false alarms.
+- **Two files decided the pooled result.** `gafgyt_tcp` and `gafgyt_udp` are near-duplicates (17 to 27 distinct rows per 20,000). Plain FedAvg scores 0.66 to 0.75 AUC on them, versus 0.98 for FedProx and 0.97 for FedAvg with local scalers. This drops plain FedAvg's pooled AUC to about 0.95.
+- **Federation did not beat local-only training here.** Local-only (0.991 AUC) is within noise of the best federated methods. Each client is a different device type with plenty of data, which is the case where federation helps least.
+- **Cause not isolated.** The shared-scaler explanation is weakened and poor fit on normal traffic explains only part of the failure. See the diagnostics section.
+- **MCP server included.** The trained detector can be queried by an LLM (Claude Desktop). Each verdict comes with the window's percentile among normal traffic and the model's known blind spots, so the LLM cannot present a missed attack as clearly normal. 44 tests, NumPy-only inference.
+
+Results are means over 3 seeds. Details, caveats and limitations are below.
 ## Motivation
 
 IoT devices generate huge amounts of traffic, and a lot of that traffic could be useful for training security models. But in practice, different devices often belong to different owners, companies, or networks, and pooling their raw traffic centrally raises privacy and bandwidth concerns. Federated learning offers a way around this: each device trains a local model on its own data, and only the model's learned parameters get shared with a central server, which aggregates them into an improved global model. Raw traffic never leaves the device.

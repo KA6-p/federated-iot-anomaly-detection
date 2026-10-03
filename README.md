@@ -53,7 +53,7 @@ The first results looked almost perfect, so I went back and stress tested them. 
 2. **Non-IID data.** The devices differ a lot in traffic patterns and in data size (thermostat about 9k benign training rows, baby monitor about 123k). Does plain FedAvg suffer, and do FedProx, equal client weighting, or local scaling help?
 3. **Unseen devices.** If a new device joins after training, does the global model work on it?
 
-I then ran three diagnostics to understand the one clear failure the extension found.
+I then ran four diagnostics to understand the one clear failure the extension found.
 
 Notes on the setup:
 - Every model trains on benign traffic only, so *every* attack is unseen at training time. The first evaluation's gap was coverage (6 of 10 attack types were never tested), not training exposure.
@@ -143,15 +143,16 @@ What this shows:
 
 ### Diagnostics on `gafgyt_tcp` and `gafgyt_udp`
 
-These three checks (in notebook 04) explain what the two hard files are and why plain FedAvg fails on them.
+These four checks (in notebook 04) explain what the two hard files are and why plain FedAvg fails on them.
 
 ![Thermostat reconstruction-error histograms](images/thermostat_error_profile.png)
 
 - **Near-copies, very repetitive.** The two files share only 1 identical row per device, but their feature means differ by at most 0.1 benign standard deviations, and each has only 17 to 27 distinct rows out of 20,000. The other 8 attack files per device are fully distinct (20,000 of 20,000).
 - **Easy to separate by raw features.** 47 to 51 individual features separate each of these attacks from benign traffic (univariate separation above 0.9), more than for the easy `mirai_syn` control (30 to 35). So the problem is not that they look like normal traffic.
-- **One fixed point, shared across devices.** With a shared scaler, both attacks have the same median reconstruction error on all four devices for a given model (0.1246 for FedAvg 1 epoch, 0.0857 for 5 epochs, 0.0719 for equal weights, 0.0911 pooled, 4.4455 FedProx). That points to the same fixed point on every device, though I did not compare the raw rows across devices directly.
+-- **A small cluster of rows shared across devices.** Each file has 17 to 27 distinct rows, and any two devices share 4 to 11 of them exactly. With a shared scaler, both attacks have the same median reconstruction error on all four devices for a given model (0.1246 for FedAvg 1 epoch, 0.0857 for 5 epochs, 0.0719 for equal weights, 0.0911 pooled, 4.4455 FedProx), consistent with the most repeated row being the same everywhere (not checked separately).
 - **The AUC behaves like a threshold effect.** That error is small next to an easy attack (`mirai_syn`: 5,000 or more). In the 5 of 28 device-method pairs (seed 0) where it falls below the device's median benign error (all plain FedAvg variants on Thermostat or Camera), AUC is 0.31 to 0.47. In every other pair it is above 0.83. So 0.49 versus 0.99 mostly reflects whether one point lands above or below normal traffic, not a graded difference in detection ability.
 - **Fit on normal traffic explains only part of it.** Plain FedAvg fits Thermostat and Camera benign traffic much worse than local-only models (median benign error 0.20 and 0.14 versus 0.02 and 0.0025). But FedProx has higher benign error than FedAvg 1 epoch on 3 of 4 devices and still scores best on these files, because it reconstructs the fixed point poorly (error 4.4 versus 0.07 to 0.12). Rank correlation between benign error and tcp/udp AUC across shared-scaler setups is only -0.42 (24 pairs, not independent), and -0.09 to -0.37 per device.
+- **The attack rows are not near the fleet average.** The typical distinct tcp/udp row is farther from the fleet-mean point than 87% to 99.6% of benign test rows, so a global model is not simply regressing toward the center. Device heterogeneity does line up with the failures: the Thermostat's and Camera's normal traffic sits farthest from the fleet mean (squared distance 0.41 and 0.15, vs 0.04 and 0.015 for Doorbell and Baby Monitor), and those are the devices where plain FedAvg fails (4 devices, so only suggestive). This analysis uses distinct rows without frequency weighting.
 - **The simple "device scales differ" explanation is weakened.** Local-only and pooled models use the same shared scaler as plain FedAvg and score well, so the shared scaler alone is not the cause. Local scaling probably helps by making the clients' data more alike, which reduces drift under averaging, but I did not test that.
 
 ### Extension: unseen devices
@@ -192,7 +193,7 @@ Federated, extension: see "Notes on the setup" above.
 - **The value of federation is not demonstrated.** Each client is a different device type with plenty of benign data, and local-only models match the best federated ones. Federation would be expected to help when there are many similar clients with little data each (for example, many doorbells with a few minutes of traffic). I did not test that.
 - **Three seeds, and seeds change only initialization and batch order, not the data split.** The ranking of the better methods is not settled. Only the gap between them and plain FedAvg on `gafgyt_tcp`/`gafgyt_udp` is clearly larger than the noise.
 - **The two hard attacks are one weak, repeated signal.** They have only 17 to 27 distinct rows per 20,000 and are near-copies of each other, so method rankings on them reflect how a model happens to treat one point (its error ranges from 0.07 to 4.4 across methods), not general detection quality. They are 20% of the pooled attack rows, so they weigh heavily in pooled AUC and TPR despite carrying little information.
-- **The cause of the FedAvg failure on these two files is not isolated.** The scaler explanation is weakened, and poor fit to normal Thermostat and Camera traffic explains only part of it. I have not tested whether the fixed point sits near the fleet-average point in scaled space.
+- **The cause of the FedAvg failure on these two files is not isolated.** The scaler explanation is weakened, and poor fit to normal Thermostat and Camera traffic explains only part of it. The tcp/udp rows are not near the fleet-average point (see diagnostics), so a simple pull toward the center does not explain it, and I have not tested why the autoencoder reconstructs these rows with such a small error.
 - **Local scaling may flatter the results.** Features that barely move in benign traffic get tiny standard deviations, which can turn small attack deviations into large z-scores. I did not test this.
 - **The benign test set is the last 30% of each capture.** Adjacent windows are correlated, and the test rows come from the same capture session as training, so I did not measure generalization across time or sessions. False-alarm rates are therefore rough estimates (the Thermostat has about 4k benign test rows).
 - **Hyperparameters were not tuned.** FedProx uses a single mu (0.1), and learning rate and epochs are fixed.

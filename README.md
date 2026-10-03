@@ -4,6 +4,7 @@ This project compares a centralized anomaly detector against a federated one, us
 
 ## Key findings
 
+The first evaluation was too easy. On 4 attack types, federated matched centralized (0.99998 vs 0.99999 AUC). Testing all 10 exposed the failure on two of them.
 - **Federation cost almost nothing on 8 of 10 attack types.** Every method, including plain FedAvg, reaches 0.9998 to 1.0000 AUC and catches at least 99.7% of attack rows at 1% false alarms.
 - **Two files decided the pooled result.** `gafgyt_tcp` and `gafgyt_udp` are near-duplicates (17 to 27 distinct rows per 20,000). Plain FedAvg scores 0.66 to 0.75 AUC on them, versus 0.98 for FedProx and 0.97 for FedAvg with local scalers. This drops plain FedAvg's pooled AUC to about 0.95.
 - **Federation did not beat local-only training here.** Local-only (0.991 AUC) is within noise of the best federated methods. Each client is a different device type with plenty of data, which is the case where federation helps least.

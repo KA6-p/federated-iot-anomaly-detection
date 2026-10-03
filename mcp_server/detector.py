@@ -46,8 +46,8 @@ def _norm(s: str) -> str:
 def _load_weights(d: Path) -> dict:
     npz = d / "model.npz"
     if npz.exists():
-        z = np.load(npz)
-        return {k: z[k].astype(np.float32) for k in KEYMAP.values()}
+        with np.load(npz) as z:
+            return {k: z[k].astype(np.float32) for k in KEYMAP.values()}
     pt = d / "model.pt"
     if pt.exists():
         try:
@@ -203,7 +203,10 @@ class Detector:
         if band == "elevated":
             return (f"Not flagged, but elevated: higher than {pct:.2f}% of {dev.short} normal training "
                     "windows, below the alert threshold (the 99th percentile of normal). A near-miss is possible.")
-        return f"Looks normal: higher than only {pct:.2f}% of {dev.short} normal training windows."
+        if pct >= 90:
+            return (f"Not flagged and below the elevated line, but in the upper tail of normal: higher than "
+                    f"{pct:.2f}% of {dev.short} normal training windows. Treat with some caution.")
+        return f"Looks normal: higher than {pct:.2f}% of {dev.short} normal training windows."
 
     def explain(self, device: str, features=None, demo_window=None, top_k: int = 8) -> dict:
         if not 1 <= int(top_k) <= self.D:

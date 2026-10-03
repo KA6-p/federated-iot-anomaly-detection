@@ -21,7 +21,10 @@ mcp = FastMCP(
         "Query a trained anomaly detection model for IoT network traffic (N-BaIoT features). "
         "Always report benign_percentile and band, not only the flagged boolean, and mention "
         "known_blind_spots_on_this_device when a window is not flagged. Explanations are "
-        "reconstruction-error attributions, not proof of cause."
+        "reconstruction-error attributions, not proof of cause. Describe only what the returned numbers "
+        "show (observed vs expected values, deviations, error shares). Do not infer attack mechanisms, "
+        "and do not explain why one device differs from another unless the tool output states it; "
+        "if you offer a reason, label it as an untested guess."
     ),
 )
 
@@ -64,7 +67,8 @@ def explain_window(device: str, features: list[float] | None = None, demo_window
     Same inputs as score_window, plus top_k (1 to 115). For the top features it returns the observed
     value, the value the model expected, the deviation from this device's normal in standard deviations,
     and each feature's share of the total reconstruction error, plus error shares grouped by traffic
-    stream and time window. This is attribution of reconstruction error, not a causal diagnosis.
+    stream and time window. This is attribution of reconstruction error, not a causal diagnosis, so
+    report the numbers and do not infer attack mechanisms from them.
     """
     return det.explain(device, features, demo_window, top_k)
 
@@ -88,7 +92,8 @@ def triage_window(device: str, demo_window: str) -> str:
         f"Use explain_window on device '{device}' with demo_window '{demo_window}'. Then write a short "
         "triage report: the verdict and where the score falls among normal traffic, the top three features "
         "driving it in plain language, and any known blind spot on this device that affects how much to "
-        "trust the verdict. State clearly that the explanation is reconstruction-error attribution."
+        "trust the verdict. State clearly that the explanation is reconstruction-error attribution, "
+        "and do not speculate beyond the returned numbers."
     )
 
 

@@ -2,7 +2,7 @@
 
 This project compares a centralized anomaly detector against a federated one, using real botnet attack traffic captured from IoT devices. The goal was to understand how much (if any) detection accuracy you give up when you cannot centralize IoT traffic data across devices, which is the realistic constraint in most actual IoT deployments.
 
-**Short version of what I found:** on the first, narrow evaluation (4 attack types), federated learning looked like it cost nothing (0.99998 AUC vs 0.99999 centralized). Extending to all 10 attack types, that holds for 8 of them: every method, including plain FedAvg, scores AUC 0.9998 to 1.0000 and catches at least 99.7% of attack rows at 1% false alarms. The weaker pooled score for plain FedAvg (0.95 AUC) comes almost entirely from two near-duplicate attack files (`gafgyt_tcp`, `gafgyt_udp`, about 20 distinct rows each), where plain FedAvg scores 0.66 to 0.75 AUC. Even the best methods catch those two files at 1% false alarms on only some devices. Federation also did not beat simply training one model per device in this setup. Details and caveats below.
+**Short version of what I found:** on the first, narrow evaluation (4 attack types), federated learning looked like it cost nothing (0.99998 AUC vs 0.99999 centralized). Extending to all 10 attack types, that holds for 8 of them: every method, including plain FedAvg, scores AUC 0.9998 to 1.0000 and catches at least 99.7% of attack rows at 1% false alarms. The weaker pooled score for plain FedAvg (0.95 AUC) comes almost entirely from two near-duplicate attack files (`gafgyt_tcp`, `gafgyt_udp`, about 20 distinct rows each), where plain FedAvg scores 0.66 to 0.75 AUC. Even the best methods catch those two files at 1% false alarms on only some devices. Federation also did not beat simply training one model per device in this setup. The trained detector is also exposed to an LLM through an MCP server (`mcp_server/`) that returns each verdict together with its percentile among normal traffic and the model's known blind spots. Details and caveats below.
 
 ## Motivation
 
@@ -30,6 +30,7 @@ I worked with 4 of the 9 devices:
 | `02_baseline_centralized.ipynb` | Notebook 2: centralized baseline (Isolation Forest and autoencoder) |
 | `03_federated_flower.ipynb` | Notebook 3: federated learning with Flower |
 | `04_extension_noniid_unseen.ipynb` | Extension: all 10 attack types, non-IID experiments, unseen devices, diagnostics |
+| `mcp_server/` | MCP server that exposes the trained model to an LLM (scoring, explanations, model card), with tests and a demo script |
 
 ## What I did
 
@@ -53,7 +54,7 @@ The first results looked almost perfect, so I went back and stress tested them. 
 2. **Non-IID data.** The devices differ a lot in traffic patterns and in data size (thermostat about 9k benign training rows, baby monitor about 123k). Does plain FedAvg suffer, and do FedProx, equal client weighting, or local scaling help?
 3. **Unseen devices.** If a new device joins after training, does the global model work on it?
 
-I then ran four diagnostics to understand the one clear failure the extension found.
+I then ran three diagnostics to understand the one clear failure the extension found.
 
 Notes on the setup:
 - Every model trains on benign traffic only, so *every* attack is unseen at training time. The first evaluation's gap was coverage (6 of 10 attack types were never tested), not training exposure.
@@ -143,16 +144,15 @@ What this shows:
 
 ### Diagnostics on `gafgyt_tcp` and `gafgyt_udp`
 
-These four checks (in notebook 04) explain what the two hard files are and why plain FedAvg fails on them.
+These three checks (in notebook 04) explain what the two hard files are and why plain FedAvg fails on them.
 
 ![Thermostat reconstruction-error histograms](images/thermostat_error_profile.png)
 
 - **Near-copies, very repetitive.** The two files share only 1 identical row per device, but their feature means differ by at most 0.1 benign standard deviations, and each has only 17 to 27 distinct rows out of 20,000. The other 8 attack files per device are fully distinct (20,000 of 20,000).
 - **Easy to separate by raw features.** 47 to 51 individual features separate each of these attacks from benign traffic (univariate separation above 0.9), more than for the easy `mirai_syn` control (30 to 35). So the problem is not that they look like normal traffic.
--- **A small cluster of rows shared across devices.** Each file has 17 to 27 distinct rows, and any two devices share 4 to 11 of them exactly. With a shared scaler, both attacks have the same median reconstruction error on all four devices for a given model (0.1246 for FedAvg 1 epoch, 0.0857 for 5 epochs, 0.0719 for equal weights, 0.0911 pooled, 4.4455 FedProx), consistent with the most repeated row being the same everywhere (not checked separately).
+- **One fixed point, shared across devices.** With a shared scaler, both attacks have the same median reconstruction error on all four devices for a given model (0.1246 for FedAvg 1 epoch, 0.0857 for 5 epochs, 0.0719 for equal weights, 0.0911 pooled, 4.4455 FedProx). That points to the same fixed point on every device, though I did not compare the raw rows across devices directly.
 - **The AUC behaves like a threshold effect.** That error is small next to an easy attack (`mirai_syn`: 5,000 or more). In the 5 of 28 device-method pairs (seed 0) where it falls below the device's median benign error (all plain FedAvg variants on Thermostat or Camera), AUC is 0.31 to 0.47. In every other pair it is above 0.83. So 0.49 versus 0.99 mostly reflects whether one point lands above or below normal traffic, not a graded difference in detection ability.
 - **Fit on normal traffic explains only part of it.** Plain FedAvg fits Thermostat and Camera benign traffic much worse than local-only models (median benign error 0.20 and 0.14 versus 0.02 and 0.0025). But FedProx has higher benign error than FedAvg 1 epoch on 3 of 4 devices and still scores best on these files, because it reconstructs the fixed point poorly (error 4.4 versus 0.07 to 0.12). Rank correlation between benign error and tcp/udp AUC across shared-scaler setups is only -0.42 (24 pairs, not independent), and -0.09 to -0.37 per device.
-- **The attack rows are not near the fleet average.** The typical distinct tcp/udp row is farther from the fleet-mean point than 87% to 99.6% of benign test rows, so a global model is not simply regressing toward the center. Device heterogeneity does line up with the failures: the Thermostat's and Camera's normal traffic sits farthest from the fleet mean (squared distance 0.41 and 0.15, vs 0.04 and 0.015 for Doorbell and Baby Monitor), and those are the devices where plain FedAvg fails (4 devices, so only suggestive). This analysis uses distinct rows without frequency weighting.
 - **The simple "device scales differ" explanation is weakened.** Local-only and pooled models use the same shared scaler as plain FedAvg and score well, so the shared scaler alone is not the cause. Local scaling probably helps by making the clients' data more alike, which reduces drift under averaging, but I did not test that.
 
 ### Extension: unseen devices
@@ -193,7 +193,7 @@ Federated, extension: see "Notes on the setup" above.
 - **The value of federation is not demonstrated.** Each client is a different device type with plenty of benign data, and local-only models match the best federated ones. Federation would be expected to help when there are many similar clients with little data each (for example, many doorbells with a few minutes of traffic). I did not test that.
 - **Three seeds, and seeds change only initialization and batch order, not the data split.** The ranking of the better methods is not settled. Only the gap between them and plain FedAvg on `gafgyt_tcp`/`gafgyt_udp` is clearly larger than the noise.
 - **The two hard attacks are one weak, repeated signal.** They have only 17 to 27 distinct rows per 20,000 and are near-copies of each other, so method rankings on them reflect how a model happens to treat one point (its error ranges from 0.07 to 4.4 across methods), not general detection quality. They are 20% of the pooled attack rows, so they weigh heavily in pooled AUC and TPR despite carrying little information.
-- **The cause of the FedAvg failure on these two files is not isolated.** The scaler explanation is weakened, and poor fit to normal Thermostat and Camera traffic explains only part of it. The tcp/udp rows are not near the fleet-average point (see diagnostics), so a simple pull toward the center does not explain it, and I have not tested why the autoencoder reconstructs these rows with such a small error.
+- **The cause of the FedAvg failure on these two files is not isolated.** The scaler explanation is weakened, and poor fit to normal Thermostat and Camera traffic explains only part of it. I have not tested whether the fixed point sits near the fleet-average point in scaled space.
 - **Local scaling may flatter the results.** Features that barely move in benign traffic get tiny standard deviations, which can turn small attack deviations into large z-scores. I did not test this.
 - **The benign test set is the last 30% of each capture.** Adjacent windows are correlated, and the test rows come from the same capture session as training, so I did not measure generalization across time or sessions. False-alarm rates are therefore rough estimates (the Thermostat has about 4k benign test rows).
 - **Hyperparameters were not tuned.** FedProx uses a single mu (0.1), and learning rate and epochs are fixed.
@@ -201,6 +201,26 @@ Federated, extension: see "Notes on the setup" above.
 - **The dataset is easy.** Attack traffic is statistically very distinct from benign traffic for most attack types, which is why most scores are near 1.0. Published N-BaIoT papers report similarly high numbers.
 - **Attack files are subsampled** to 20,000 rows each in the extension. AUC should be stable at that size, but I did not test other sizes.
 - **No privacy analysis.** Sharing weights instead of data reduces exposure, but model updates can still leak information. I used no differential privacy or secure aggregation.
+
+## MCP server: querying the trained model from an LLM
+
+`mcp_server/` wraps the exported FedAvg + local-scalers autoencoder in a [Model Context Protocol](https://modelcontextprotocol.io) server, so an LLM client such as Claude Desktop can score IoT traffic windows and explain why they were flagged. The weights, per-device scalers and thresholds are produced by the last cells of notebook 04.
+
+- **Tools:** `list_devices`, `get_model_card`, `score_window`, `explain_window`, `list_features`.
+- **Context with every verdict:** each score reports where it falls among that device's normal training windows (benign percentile), a band (normal, elevated, flagged) and the model's known blind spots on that device. The experiments above showed that `gafgyt_tcp`/`udp` can sit in the top 10% of normal traffic and still stay under the alert threshold, which a plain flagged/not-flagged answer would hide.
+- **Explanations:** per-feature reconstruction-error attribution (observed vs expected value, deviation from the device's normal, share of the error), with feature names decoded to plain language. It is attribution, not a causal diagnosis.
+- **Engineering:** NumPy-only inference, checked against PyTorch (worst relative difference 7.1e-07 on 16 windows), 44 tests, and thresholds taken from benign training error so no attack labels are needed.
+- **Checked against the LLM's answers:** I compared Claude Desktop's answers with the tool output. Scores, thresholds, percentiles and blind-spot rates matched. In some follow-up explanations Claude added claims the tool output does not support (for example, naming an attack subtype), so the server's output tells the LLM to report only the returned numbers. That reduces the problem but does not remove it.
+
+Example from Claude Desktop (Camera, `gafgyt_tcp` demo window): Claude reports the window as not flagged at the 90.3rd benign percentile, and warns that only about 0.1% of real `gafgyt_tcp` windows exceed the alert threshold on this device.
+
+![Claude Desktop scoring the Camera gafgyt_tcp window](images/mcp_demo.png)
+
+For contrast, the `mirai_syn` demo window on the Thermostat is flagged at about 1.5 million times the alert threshold.
+
+![Claude Desktop scoring the Thermostat mirai_syn window](images/mcp_demo_flagged.png)
+
+See [`mcp_server/README.md`](mcp_server/README.md) for setup, design decisions and demo output.
 
 ## How to run this
 
@@ -210,6 +230,7 @@ All notebooks are built for Google Colab.
 2. In Colab, click the key icon in the left sidebar, add a secret named `KAGGLE_TOKEN` with your token as the value, and turn on notebook access.
 3. Run notebooks 01, 02 and 03 in order. Each one saves intermediate output to Google Drive under `nbaiot-project/processed` for the next one to load. Notebook 3 deletes the full dataframe after writing per-client files, so to rerun its earlier cells, restart the runtime first.
 4. Run `04_extension_noniid_unseen.ipynb`. It downloads the raw data itself (about 1.75 GB, skipped if already present) and does not need steps 1 to 3. With the default 3 seeds the main experiments took roughly 15 to 20 minutes on Colab CPU, plus a few minutes for the diagnostics. It saves result CSV files to the same Drive folder.
+5. To try the MCP server, follow `mcp_server/README.md`.
 
 ## What I would extend this toward
 

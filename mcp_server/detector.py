@@ -35,7 +35,10 @@ REASONING_NOTE = (
     "Reading guide: this is reconstruction-error attribution. It shows which features the "
     "autoencoder could not reproduce for this window, not a causal diagnosis. Features are "
     "standardized with this device's own benign statistics, so a feature that barely varies in "
-    "normal traffic can show a large deviation from a small absolute change."
+    "normal traffic can show a large deviation from a small absolute change. Report these numbers as "
+    "they are. Do not name attack types or mechanisms from feature patterns, and do not attribute "
+    "differences between devices to their traffic unless a number in this output shows it; label any "
+    "such reason as an untested guess."
 )
 
 
